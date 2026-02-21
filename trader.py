@@ -10,24 +10,43 @@ from datetime import datetime
 import requests
 
 class Trader:
-    def __init__(self, api_key=None):
+    def __init__(self, api_key=None, save_slot='default'):
         self.api_key = api_key or os.getenv('TRADING_API_KEY')
+        self.save_slot = save_slot
         self.portfolio = self.load_portfolio()
         self.balance = self.portfolio.get('balance', 10000.0)  # Starting balance
         self.cached_prices = {}  # Cache prices until explicitly refreshed
         
     def load_portfolio(self):
         """Load portfolio from file"""
+        filename = f'save_{self.save_slot}.json'
         try:
-            with open('portfolio.json', 'r') as f:
+            with open(filename, 'r') as f:
                 return json.load(f)
         except FileNotFoundError:
-            return {'balance': 10000.0, 'holdings': {}, 'history': []}
+            return {'balance': 10000.0, 'holdings': {}, 'history': [], 'save_name': self.save_slot}
     
     def save_portfolio(self):
         """Save portfolio to file"""
-        with open('portfolio.json', 'w') as f:
+        filename = f'save_{self.save_slot}.json'
+        self.portfolio['save_name'] = self.save_slot
+        with open(filename, 'w') as f:
             json.dump(self.portfolio, f, indent=2)
+    
+    def list_saves(self):
+        """List all available save files"""
+        saves = []
+        for file in os.listdir('.'):
+            if file.startswith('save_') and file.endswith('.json'):
+                save_name = file[5:-5]  # Remove 'save_' and '.json'
+                try:
+                    with open(file, 'r') as f:
+                        data = json.load(f)
+                        balance = data.get('balance', 0)
+                        saves.append((save_name, balance))
+                except:
+                    pass
+        return saves
     
     def get_price(self, symbol, asset_type='crypto', refresh=False):
         """Get current price of an asset"""
@@ -187,7 +206,20 @@ def main():
     print("🚀 Crypto & Stock Trading Bot")
     print("="*50)
     
-    trader = Trader()
+    # Show available saves
+    temp_trader = Trader()
+    saves = temp_trader.list_saves()
+    
+    if saves:
+        print("\n💾 Available Saves:")
+        for save_name, balance in saves:
+            print(f"  - {save_name} (Balance: ${balance:.2f})")
+    
+    print("\nEnter save name (or press Enter for 'default'):")
+    save_slot = input("> ").strip() or 'default'
+    
+    trader = Trader(save_slot=save_slot)
+    print(f"\n✅ Loaded save: {save_slot}")
     
     while True:
         print("\nCommands:")
@@ -196,6 +228,8 @@ def main():
         print("  portfolio              - Show your portfolio")
         print("  history               - Show transaction history")
         print("  price <symbol>        - Check current price")
+        print("  saves                 - List all save files")
+        print("  switch <name>         - Switch to different save")
         print("  quit                  - Exit")
         
         command = input("\n> ").strip().lower()
@@ -207,6 +241,16 @@ def main():
             trader.show_portfolio()
         elif command == 'history':
             trader.show_history()
+        elif command == 'saves':
+            saves = trader.list_saves()
+            print("\n💾 Available Saves:")
+            for save_name, balance in saves:
+                current = " (CURRENT)" if save_name == trader.save_slot else ""
+                print(f"  - {save_name} (Balance: ${balance:.2f}){current}")
+        elif command.startswith('switch '):
+            new_save = command.split(maxsplit=1)[1]
+            trader = Trader(save_slot=new_save)
+            print(f"✅ Switched to save: {new_save}")
         elif command.startswith('buy '):
             parts = command.split()
             if len(parts) == 3:
