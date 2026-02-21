@@ -14,6 +14,7 @@ class Trader:
         self.api_key = api_key or os.getenv('TRADING_API_KEY')
         self.portfolio = self.load_portfolio()
         self.balance = self.portfolio.get('balance', 10000.0)  # Starting balance
+        self.cached_prices = {}  # Cache prices until explicitly refreshed
         
     def load_portfolio(self):
         """Load portfolio from file"""
@@ -28,28 +29,57 @@ class Trader:
         with open('portfolio.json', 'w') as f:
             json.dump(self.portfolio, f, indent=2)
     
-    def get_price(self, symbol, asset_type='crypto'):
+    def get_price(self, symbol, asset_type='crypto', refresh=False):
         """Get current price of an asset"""
-        try:
-            if asset_type == 'crypto':
-                # Using CoinGecko free API
-                url = f"https://api.coingecko.com/api/v3/simple/price?ids={symbol}&vs_currencies=usd"
-                response = requests.get(url)
-                data = response.json()
-                return data[symbol]['usd']
-            elif asset_type == 'stock':
-                # Placeholder - would need stock API key
-                print(f"Stock API integration needed. Symbol: {symbol}")
-                return None
-        except Exception as e:
-            print(f"Error fetching price: {e}")
-            return None
+        symbol_lower = symbol.lower()
+        
+        # Return cached price unless refresh is requested
+        if not refresh and symbol_lower in self.cached_prices:
+            return self.cached_prices[symbol_lower]
+        
+        # Generate new price
+        import random
+        
+        # Base prices with custom fluctuation ($15k-$90k for Bitcoin)
+        base_prices = {
+            'bitcoin': 52500,  # Will range from $15,000 to $90,000
+            'btc': 52500,
+            'ethereum': 2800,
+            'eth': 2800,
+            'dogecoin': 0.08,
+            'doge': 0.08,
+            'cardano': 0.45,
+            'ada': 0.45,
+            'solana': 110,
+            'sol': 110,
+            'ripple': 0.52,
+            'xrp': 0.52,
+            'litecoin': 85,
+            'ltc': 85,
+        }
+        
+        if symbol_lower in base_prices:
+            # Bitcoin ranges from $15,000 to $90,000
+            if symbol_lower in ['bitcoin', 'btc']:
+                price = random.uniform(15000, 90000)
+            else:
+                # Other cryptos use ±50% fluctuation
+                base = base_prices[symbol_lower]
+                fluctuation = random.uniform(-0.50, 0.50)
+                price = base * (1 + fluctuation)
+            
+            # Cache the price
+            self.cached_prices[symbol_lower] = price
+            return price
+        
+        return None
     
     def buy(self, symbol, amount, asset_type='crypto'):
         """Buy an asset"""
         price = self.get_price(symbol, asset_type)
-        if not price:
-            print("Could not fetch price")
+        if price is None:
+            print(f"❌ Unknown crypto: {symbol}")
+            print("Available: bitcoin, ethereum, dogecoin, cardano, solana, ripple, litecoin")
             return False
         
         cost = price * amount
@@ -189,7 +219,7 @@ def main():
                 trader.sell(symbol, float(amount))
         elif command.startswith('price '):
             symbol = command.split()[1]
-            price = trader.get_price(symbol)
+            price = trader.get_price(symbol, refresh=True)  # Force refresh when checking price
             if price:
                 print(f"💵 {symbol.upper()}: ${price:.2f}")
         else:
